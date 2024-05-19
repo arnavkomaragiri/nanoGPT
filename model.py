@@ -15,6 +15,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from efficientkan import KAN
+
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 
@@ -91,14 +93,28 @@ class MLP(nn.Module):
         x = self.dropout(x)
         return x
 
-class Block(nn.Module):
+class KANMLP(nn.Module):
 
     def __init__(self, config):
+        super().__init__()
+        self.model = KAN([config.n_embd, 4 * config.n_embd, config.n_embd])
+        self.dropout = nn.Dropout(config.dropout)
+    
+    def forward(self, x):
+        x = self.model(x)
+        x = self.dropout(x)
+        return x
+
+
+
+class Block(nn.Module):
+
+    def __init__(self, config, mlp = MLP):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
-        self.mlp = MLP(config)
+        self.mlp = mlp(config)
 
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
@@ -117,7 +133,7 @@ class GPTConfig:
 
 class GPT(nn.Module):
 
-    def __init__(self, config):
+    def __init__(self, config, mlp = MLP):
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
@@ -127,7 +143,7 @@ class GPT(nn.Module):
             wte = nn.Embedding(config.vocab_size, config.n_embd),
             wpe = nn.Embedding(config.block_size, config.n_embd),
             drop = nn.Dropout(config.dropout),
-            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
+            h = nn.ModuleList([Block(config, mlp=mlp) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
