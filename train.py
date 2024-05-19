@@ -193,6 +193,7 @@ elif init_from.startswith('gpt2'):
 if block_size < model.config.block_size:
     model.crop_block_size(block_size)
     model_args['block_size'] = block_size # so that the checkpoint will have the right value
+print(model)
 model.to(device)
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
