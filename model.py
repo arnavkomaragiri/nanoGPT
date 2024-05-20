@@ -105,6 +105,9 @@ class KANMLP(nn.Module):
         x = self.dropout(x)
         return x
 
+    def update_grid(self, x):
+        self.model.update_grid(x)
+
 
 
 class Block(nn.Module):
@@ -120,6 +123,9 @@ class Block(nn.Module):
         x = x + self.attn(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
         return x
+
+    def update_grid(self, x):
+        self.mlp.update_grid(x)
 
 @dataclass
 class GPTConfig:
@@ -207,6 +213,20 @@ class GPT(nn.Module):
             loss = None
 
         return logits, loss
+    
+    def update_grid(self, idx):
+        device = idx.device
+        b, t = idx.size()
+        assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+        pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
+
+        # forward the GPT model itself
+        tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
+        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
+        x = self.transformer.drop(tok_emb + pos_emb)
+        for i, block in enumerate(self.transformer.h):
+            self.transformer.h[i].update_grid(x.reshape(-1, x.size(-1)))
+            x = block(x)
 
     def crop_block_size(self, block_size):
         # model surgery to decrease the block size if necessary

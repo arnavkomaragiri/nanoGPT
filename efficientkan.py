@@ -278,6 +278,11 @@ class KAN(torch.nn.Module):
                 layer.update_grid(x)
             x = layer(x)
         return x
+    
+    def update_grid(self, x: torch.Tensor):
+        for layer in self.layers:
+            layer.update_grid(x)
+            x = layer(x)
 
     def regularization_loss(self, regularize_activation=1.0, regularize_entropy=1.0):
         return sum(

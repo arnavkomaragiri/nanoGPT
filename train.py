@@ -31,6 +31,8 @@ from model import GPTConfig, GPT, MLP, KANMLP
 
 # KAN Parameters
 use_kan = True
+update_grid_iters = 2500
+num_grid_updates = 10
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -250,6 +252,9 @@ if wandb_log and master_process:
     import wandb
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
+# compute grid update frequency for KAN LLMs
+grid_update_freq = int((update_grid_iters - warmup_iters) / num_grid_updates)
+
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
 t0 = time.time()
@@ -257,6 +262,13 @@ local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
 while True:
+
+    # get number of non-warmup iterations executed
+    non_warmup_iters = max(0, iter_num - warmup_iters)
+    # update grid size if in grid size update range
+    if use_kan and iter_num < update_grid_iters and iter_num >= warmup_iters and non_warmup_iters % grid_update_freq == 0:
+        print(f"updating KAN grid at iteration, iter: {iter_num}, num_grid_updates: {non_warmup_iters // grid_update_freq}")
+        model.update_grid(X)
 
     # determine and set the learning rate for this iteration
     lr = get_lr(iter_num) if decay_lr else learning_rate
